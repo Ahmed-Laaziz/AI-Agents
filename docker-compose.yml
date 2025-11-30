@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+
+  mcp-client:
+    build:
+      context: ./mcp_client
+      dockerfile: Dockerfile
+    container_name: mcp-client-container
+    ports:
+      - "5353:5353"
+    env_file:
+      - ${MCP_CLIENT_ENV_FILE:-./mcp_client/.env.docker}
+    volumes:
+      - ./mcp_client:/app
+    networks:
+      - ai_net
+
+  user-interface:
+    build:
+      context: ./user_interface
+      dockerfile: Dockerfile
+    container_name: user-interface-container
+    ports:
+      - "7860:7860"
+    env_file:
+      - ${USER_INTERFACE_ENV_FILE:-./user_interface/.env.docker}
+    volumes:
+      - ./user_interface:/app
+    networks:
+      - ai_net
+
+  mcp-mongodb:
+    build:
+      context: ./mcp_servers/db_server
+      dockerfile: Dockerfile
+    container_name: db-mcp-server-container
+    ports:
+      - "5959:5959"
+    volumes:
+      - ./mcp_servers/db_server:/app
+    networks:
+      - ai_net
+
+  ollama:
+    image: ollama/ollama
+    container_name: ollama-container
+    deploy:
+      resources:
+        limits:
+          memory: 8g
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    networks:
+      - ai_net
+  
+volumes:
+  ollama_models:
+
+networks:
+  ai_net:
+    driver: bridge

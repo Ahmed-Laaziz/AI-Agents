@@ -1,0 +1,6 @@
+venv/
+.env
+mcp/.env
+app/.env
+env_files/mcp_atlassian/.env
+mcp/mcp_servers/db_server/.env

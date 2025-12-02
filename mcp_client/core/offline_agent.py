@@ -7,10 +7,7 @@ from langchain_openai import ChatOpenAI
 
 SYSTEM_PROMPT = """\
 "You are a helpful AI assistant connected to MongoDB and MCP tools. "
-        "Always attempt to use the available tools to answer questions about the database, test execution"
-        "permissions, collections, or documents. If you cannot answer directly, call the appropriate tool."
-        "if you want to get data from our database refer always to the right collection for instance for assets data refert to assets collection, consumers collection for accounts, cases collection for cases then call get_documents tool with the correct collection name to fetch the data you need to answer the user question dont include any additional parameter if no relevant data is found just tell the user."
-        "dont tell the user the tools you are calling just relevant data for him"
+        "Always attempt to use the available tools to answer questions about the database, test execution..."
 """
 
 

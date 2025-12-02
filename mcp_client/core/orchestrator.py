@@ -1,5 +1,5 @@
 from llama_index.tools.mcp import McpToolSpec
-from core.client_factory import get_db_client, get_jira_client  # add more as needed
+from core.client_factory import get_db_client
 from core.offline_agent import get_agent
 from llama_index.core.workflow import Context
 
@@ -8,7 +8,6 @@ from llama_index.core.workflow import Context
 async def load_all_mcp_tools():
     clients = [
         get_db_client(),
-        # get_jira_client(),
         # add more MCP clients...
     ]
 

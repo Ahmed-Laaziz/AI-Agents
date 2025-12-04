@@ -1,93 +1,170 @@
 import gradio as gr
 import requests
 import logging
-from config import Settings # <--- Ensure you have a 'config.py' file
+from config import Settings
 
 # --- Configuration & Setup ---
-
-# Set up logging for better visibility of API calls and errors
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Get the API URL from settings
-try:
-    API_URL = f"{Settings.MCP_CLIENT_BASE_URL}/api/v1/agent/offline_agent"
-    logging.info(f"API endpoint set to: {API_URL}")
-except AttributeError:
-    # Handle case where Settings or the URL key is missing
-    logging.error("Configuration Error: Settings or MCP_CLIENT_BASE_URL not found. Using local placeholder URL.")
-    # IMPORTANT: Replace this with your actual local/remote server address if needed
-    API_URL = "http://127.0.0.1:5353/api/v1/agent/offline_agent" 
+# Define Endpoints
+OFFLINE_AGENT_URL = f"{Settings.MCP_CLIENT_BASE_URL}/api/v1/agent/offline_agent"
+WORKFLOW_URL = f"{Settings.MCP_CLIENT_BASE_URL}/api/v1/agent/workflow" # Matches your router
 
+# Default fallback for testing if config fails
+if not Settings.MCP_CLIENT_BASE_URL:
+    OFFLINE_AGENT_URL = "http://127.0.0.1:5353/api/v1/agent/offline_agent"
+    WORKFLOW_URL = "http://127.0.0.1:5353/api/v1/agent/workflow"
 
-# --- Agent Communication Function ---
+# --- Logic Functions ---
 
 def chat_with_agent(message, history):
     """
-    Sends the user message and conversation history to the backend API.
-
-    :param message: The latest user input string.
-    :param history: The list of previous conversation turns 
-                    ([[user_msg_1, bot_resp_1], ...]) provided by gr.ChatInterface.
-    :return: The agent's response string.
+    Handles 'Free Conversation' mode via /offline_agent
     """
     if not message:
-        return "Please enter a message to begin the chat."
-    
-    # Prepare the payload for the backend API
+        return ""
+
     payload = {
         "prompt": message,
-        # The history from Gradio is usually in the correct format for agent backends
-        "history": history 
     }
-    
-    agent_reply = "⚠️ No response from agent" # Default safety message
 
     try:
-        logging.info(f"Sending request for message: '{message}'")
-        
-        # Make the POST request with a reasonable timeout
-        response = requests.post(API_URL, json=payload, timeout=600)
-        
-        # Raise an exception for bad status codes (4xx or 5xx)
-        response.raise_for_status() 
-
-        # Parse JSON response and extract the reply
+        response = requests.post(OFFLINE_AGENT_URL, json=payload, timeout=120)
+        response.raise_for_status()
         data = response.json()
-        
-        # Safely extract the 'response' key, assuming the backend returns {'response': '...'}
-        agent_reply = data.get("response", "⚠️ Agent replied, but the expected 'response' key was missing in the JSON.")
-        logging.info("Successfully received reply from agent.")
+        return data.get("response", "⚠️ Response missing 'response' key.")
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
 
+def run_workflow(model_name):
+    """
+    Handles 'Predefined Workflow' mode via /workflow
+    Returns the agent's text output directly.
+    """
+    
+    payload = {
+        "prompt": "Trigger Workflow", 
+        "model": model_name
+    }
+    
+    try:
+        status_msg = f"🚀 Workflow triggered for model **{model_name}**... Please wait (this may take a moment)."
+        
+        response = requests.post(WORKFLOW_URL, json=payload, timeout=300) 
+        response.raise_for_status()
+        
+        # --- KEY CHANGE: Parse JSON and strip surrounding quotes/newlines ---
+        
+        # 1. Attempt to parse as JSON first. 
+        # Even if the backend only returned the string "Based on...", requests might treat it as 
+        # a JSON string that needs to be decoded.
+        try:
+            # If the backend returned a JSON string like '{"response": "..."}' or 
+            # if FastAPI/requests wrapper puts the string in quotes, this extracts the content.
+            agent_output_text = response.json() 
+        except requests.exceptions.JSONDecodeError:
+            # If it's pure raw text without outer quotes, use response.text
+            agent_output_text = response.text
+            
+        # 2. Clean the string to remove any persistent outer quotes or whitespace.
+        # This handles cases where the raw string starts/ends with a quote or a newline.
+        if isinstance(agent_output_text, str):
+            # Clean up leading/trailing quotes and whitespace
+            # .strip() handles whitespace, and we explicitly remove quotes if present.
+            final_output = agent_output_text.strip().strip('"')
+        else:
+            # Should not happen if the backend returns a string, but as a fallback
+            final_output = str(agent_output_text)
+            
+        # 3. Ensure \n are correctly interpreted by Gradio's Markdown component
+        # Gradio's Markdown component usually handles \n for line breaks correctly, 
+        # but if it fails, you might need to replace \n with HTML <br> or double spaces/newlines
+        # for strict Markdown compliance. However, usually, a clean string is enough.
+        
+        return final_output
+        
     except requests.exceptions.HTTPError as e:
         status_code = e.response.status_code
-        agent_reply = f"❌ HTTP Error {status_code}: Could not reach backend agent."
-        logging.error(f"HTTP Error: {status_code} - {e}")
-        
-    except requests.exceptions.RequestException as e:
-        agent_reply = f"❌ Connection Error: Request failed (Timeout or Connection Refused). Details: {e}"
-        logging.error(f"Request Error: {e}")
+        error_details = e.response.text if e.response.text else "No further details."
+        return f"❌ **Workflow HTTP Error {status_code}**: Could not reach backend agent.\nDetails: {error_details}"
         
     except Exception as e:
-        agent_reply = f"❌ General Error: An unexpected error occurred. Details: {e}"
-        logging.error(f"General Error: {e}")
+        return f"❌ **Workflow Failed**: An unexpected error occurred.\nDetails: {str(e)}"
+def on_mode_select(choice):
+    """
+    Shows/Hides groups based on selection
+    """
+    if choice == "Free Conversation":
+        return gr.update(visible=True), gr.update(visible=False)
+    else:
+        return gr.update(visible=False), gr.update(visible=True)
 
-    # Return the agent's reply. gr.ChatInterface handles display and history update.
-    return agent_reply
+# --- Main Application ---
 
+with gr.Blocks(theme=gr.themes.Soft(), title="🤖 AI Orchestrator") as demo:
+    
+    gr.Markdown("# 🤖 Intelligent Agent System")
+    
+    # 1. Selection Area
+    with gr.Row():
+        mode_radio = gr.Radio(
+            choices=["Free Conversation", "Predefined Workflow"],
+            value="Free Conversation",
+            label="Select Interaction Mode",
+            info="Choose 'Free Conversation' to chat or 'Workflow' to run the automated analysis."
+        )
 
-# --- Gradio Interface ---
+    # 2. Free Conversation Interface (Chatbot)
+    with gr.Group(visible=True) as chat_group:
+        gr.Markdown("### 💬 Free Conversation")
+        chatbot = gr.Chatbot(height=450)
+        msg = gr.Textbox(placeholder="Ask me anything about the test data...", show_label=False)
+        clear = gr.ClearButton([msg, chatbot])
 
-# Use gr.ChatInterface for the cleanest implementation
-iface = gr.ChatInterface(
-    fn=chat_with_agent,
-    title="🤖 Test Data Offline Agent",
-    # description="Chat with your AI agent connected to MongoDB.",
-    # Component customization
-    chatbot=gr.Chatbot(height=500), # Defines the display window
-    textbox=gr.Textbox(placeholder="Ask your MongoDB questions and press Enter or the Send button...", lines=2),
-    # The Send/Submit button is automatically included by gr.ChatInterface
-    theme=gr.themes.Soft(), # Optional theme customization
-)
+        # Hook up ChatInterface logic manually using components
+        msg.submit(
+            fn=lambda m, h: (m, h + [[m, None]]), 
+            inputs=[msg, chatbot], 
+            outputs=[msg, chatbot], 
+            queue=False
+        ).then(
+            fn=lambda m, h: h[-1].__setitem__(1, chat_with_agent(h[-1][0], h[:-1])) or h,
+            inputs=[msg, chatbot],
+            outputs=[chatbot]
+        )
 
-# Launch the application
-iface.launch(server_name="0.0.0.0", server_port=7860)
+    # 3. Workflow Interface (UPDATED SECTION)
+    with gr.Group(visible=False) as workflow_group:
+        gr.Markdown("### ⚙️ Predefined Workflow: Asset Analysis")
+        
+        with gr.Row():
+            model_input = gr.Dropdown(
+                choices=["llama3.2"], 
+                value="llama3.2", 
+                label="Model Selection"
+            )
+            run_btn = gr.Button("▶️ Run Workflow", variant="primary")
+        
+        # --- KEY CHANGE: Use gr.Markdown for the output ---
+        # Markdown component automatically renders **bold** and *italics*
+        output_area = gr.Markdown(
+            label="Workflow Output", 
+            value="*Workflow results will appear here...*"
+        ) 
+        
+        # Hook up button
+        run_btn.click(
+            fn=run_workflow,
+            inputs=[model_input],
+            outputs=[output_area]
+        )
+
+    # 4. Toggle Logic
+    mode_radio.change(
+        fn=on_mode_select,
+        inputs=[mode_radio],
+        outputs=[chat_group, workflow_group]
+    )
+
+if __name__ == "__main__":
+    demo.launch(server_name="0.0.0.0", server_port=7860)

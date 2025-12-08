@@ -47,7 +47,7 @@ Une fois que tous les conteneurs sont opérationnels, vous pouvez accéder aux d
 
 -----
 
-## 👨‍💻 Pour les Développeurs : Ajouter un Nouveau Serveur MCP
+## 👨‍💻 Ajouter un Nouveau Serveur MCP
 
 Si vous souhaitez étendre les capacités de l'agent, vous devrez ajouter de nouveaux serveurs et les intégrer au client orchestrateur.
 

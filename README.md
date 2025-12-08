@@ -30,8 +30,29 @@ Exécutez la commande suivante à la racine du dépôt. Cette commande va constr
 ```bash
 docker-compose up -d --build
 ```
+### Étape 2 : Installation du Modèle de Langage (LLM)
+L'agent nécessite un modèle de langage installé dans le conteneur Ollama pour fonctionner.
 
-### Étape 2 : Accès aux Services
+Accédez au conteneur Ollama :
+
+```Bash
+
+docker exec -it ollama-container /bin/bash
+```
+
+Téléchargez le modèle : Exécutez la commande Ollama suivante pour télécharger le modèle llama3.2 (ou tout autre modèle de votre choix) :
+
+```Bash
+
+ollama pull llama3.2
+```
+Quittez le conteneur :
+
+```Bash
+
+exit
+```
+### Étape 3 : Accès aux Services
 
 Une fois que tous les conteneurs sont opérationnels, vous pouvez accéder aux différents services :
 

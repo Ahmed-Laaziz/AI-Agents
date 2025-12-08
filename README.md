@@ -1,6 +1,8 @@
 ## 🤖 Agent IA MongoDB (MCP)
 
 Ce projet met en œuvre une architecture d'agent intelligent conçue pour orchestrer et répondre aux requêtes complexes des utilisateurs relatives à une base de données MongoDB. Le cœur de cette solution réside dans le mcp_client, l'orchestrateur, qui gère le flux de travail et distribue les tâches aux différents mcp_server spécialisés.
+
+
 -----
 
 ## 🏗️ Architecture du Projet

@@ -27,7 +27,7 @@ async def load_all_mcp_tools():
 async def run_offline_agent(prompt: str, model_name: str):
     tools = await load_all_mcp_tools()
 
-    agent = await get_agent(tools, model_name)
+    agent = await get_agent(tools, "mistral")
     agent_context = Context(agent)
 
     from core.offline_agent import handle_user_message

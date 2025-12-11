@@ -3,7 +3,7 @@ from typing import Optional
 from config import Settings
 class PromptRequest(BaseModel):
     prompt: str
-    model: Optional[str] = "llama3.2"
+    model: Optional[str] = "llama3"
 
 class ChatRequest(BaseModel):
     user_message: str

@@ -29,7 +29,7 @@ def chat_with_agent(message, history):
     }
 
     try:
-        response = requests.post(OFFLINE_AGENT_URL, json=payload, timeout=120)
+        response = requests.post(OFFLINE_AGENT_URL, json=payload, timeout=300)
         response.raise_for_status()
         data = response.json()
         return data.get("response", "⚠️ Response missing 'response' key.")
@@ -37,59 +37,20 @@ def chat_with_agent(message, history):
         return f"❌ Error: {str(e)}"
 
 def run_workflow(model_name):
-    """
-    Handles 'Predefined Workflow' mode via /workflow
-    Returns the agent's text output directly.
-    """
-    
     payload = {
-        "prompt": "Trigger Workflow", 
+        "prompt": "Trigger Workflow",
         "model": model_name
     }
-    
+
     try:
-        status_msg = f"🚀 Workflow triggered for model **{model_name}**... Please wait (this may take a moment)."
-        
-        response = requests.post(WORKFLOW_URL, json=payload, timeout=300) 
+        response = requests.post(WORKFLOW_URL, json=payload, timeout=300)
         response.raise_for_status()
-        
-        # --- KEY CHANGE: Parse JSON and strip surrounding quotes/newlines ---
-        
-        # 1. Attempt to parse as JSON first. 
-        # Even if the backend only returned the string "Based on...", requests might treat it as 
-        # a JSON string that needs to be decoded.
-        try:
-            # If the backend returned a JSON string like '{"response": "..."}' or 
-            # if FastAPI/requests wrapper puts the string in quotes, this extracts the content.
-            agent_output_text = response.json() 
-        except requests.exceptions.JSONDecodeError:
-            # If it's pure raw text without outer quotes, use response.text
-            agent_output_text = response.text
-            
-        # 2. Clean the string to remove any persistent outer quotes or whitespace.
-        # This handles cases where the raw string starts/ends with a quote or a newline.
-        if isinstance(agent_output_text, str):
-            # Clean up leading/trailing quotes and whitespace
-            # .strip() handles whitespace, and we explicitly remove quotes if present.
-            final_output = agent_output_text.strip().strip('"')
-        else:
-            # Should not happen if the backend returns a string, but as a fallback
-            final_output = str(agent_output_text)
-            
-        # 3. Ensure \n are correctly interpreted by Gradio's Markdown component
-        # Gradio's Markdown component usually handles \n for line breaks correctly, 
-        # but if it fails, you might need to replace \n with HTML <br> or double spaces/newlines
-        # for strict Markdown compliance. However, usually, a clean string is enough.
-        
-        return final_output
-        
-    except requests.exceptions.HTTPError as e:
-        status_code = e.response.status_code
-        error_details = e.response.text if e.response.text else "No further details."
-        return f"❌ **Workflow HTTP Error {status_code}**: Could not reach backend agent.\nDetails: {error_details}"
-        
+
+        data = response.json()
+        return data.get("final_answer", "⚠️ Aucun résultat renvoyé par le workflow.")
+
     except Exception as e:
-        return f"❌ **Workflow Failed**: An unexpected error occurred.\nDetails: {str(e)}"
+        return f"❌ Workflow Failed: {str(e)}"
 def on_mode_select(choice):
     """
     Shows/Hides groups based on selection
@@ -139,8 +100,8 @@ with gr.Blocks(theme=gr.themes.Soft(), title="🤖 AI Orchestrator") as demo:
         
         with gr.Row():
             model_input = gr.Dropdown(
-                choices=["llama3.2"], 
-                value="llama3.2", 
+                choices=["mistral"], 
+                value="mistral", 
                 label="Model Selection"
             )
             run_btn = gr.Button("▶️ Run Workflow", variant="primary")

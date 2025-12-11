@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from models.schemas import PromptRequest
 from core.chatter import run_offline_agent, load_all_mcp_tools
-from core.orchestrator import HybridWorkflow
+from core.orchestrator import OracleApiWorkflow
 from core.utils import serialize_tool
 
 router = APIRouter()
@@ -16,9 +16,9 @@ async def ask_offline_agent(payload: PromptRequest):
 
 @router.post("/workflow")
 async def hybrid_orchestration(payload: PromptRequest):
-    workflow = HybridWorkflow()
+    workflow = OracleApiWorkflow()
     result = await workflow.run(model_name=payload.model)
-    return result["agent_output"]
+    return result
 
 @router.get("/get_tools")
 async def list_tools():

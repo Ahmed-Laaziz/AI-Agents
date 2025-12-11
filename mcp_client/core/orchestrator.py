@@ -5,60 +5,73 @@ from core.client_factory import get_db_client
 from core.offline_agent import get_agent, handle_user_message
 import os
 
+# --- Événements Spécifiques au Flux de Travail ---
+
 class ToolsLoaded(Event):
+    """Indique que les outils du serveur MCP ont été découverts."""
     pass
 
-class DataFetched(Event):
+class CompanyIDFetched(Event):
+    """Indique que le SOC_ID a été récupéré d'Oracle."""
     pass
 
-class HybridWorkflow(Workflow):
+# --- Le Flux de Travail ---
+
+class OracleApiWorkflow(Workflow):
+    """
+    Workflow pour chaîner la récupération du SOC_ID depuis Oracle
+    et l'appel d'une API externe Parc-Admin.
+    """
 
     def __init__(self):
-        # increase timeout (default = 10s → too short)
-        super().__init__(timeout=120)
+        # Augmenter le timeout pour laisser le temps au LLM et aux API de répondre
+        super().__init__(timeout=300)
 
     @step()
     async def load_tools(self, ctx: Context, ev: StartEvent) -> ToolsLoaded:
-        ctx.model_name = getattr(ev, "model_name", None)
+        """Découvre tous les outils exposés par le serveur MCP (Oracle/API)."""
+        
+        # Récupère le nom du modèle LLM depuis l'événement de démarrage
+        ctx.model_name = getattr(ev, "model_name", "mistral") 
 
         client = get_db_client()
         spec = McpToolSpec(client=client)
+        # Liste tous les outils disponibles (y compris les deux nouveaux)
         ctx.tools = await spec.to_tool_list_async()
+        
         return ToolsLoaded()
 
     @step()
-    async def fetch_mandatory_data(self, ctx: Context, ev: ToolsLoaded) -> DataFetched:
-        list_collections = next(t for t in ctx.tools if t.metadata.name == "list_collections")
-        get_documents = next(t for t in ctx.tools if t.metadata.name == "get_documents")
-
-        ctx.collections = await list_collections.acall()
-        ctx.assets = await get_documents.acall(collection_name="assets", limit=100)
-        return DataFetched()
-
-    @step()
-    async def agent_reasoning(self, ctx: Context, ev: DataFetched) -> StopEvent:
+    async def execute_tool_chain(self, ctx: Context, ev: ToolsLoaded) -> StopEvent:
+        """
+        Exécute la chaîne d'outils Oracle -> LLM -> API Externe.
+        L'Agent LLM est responsable de déterminer l'ordre.
+        """
+        
+        # 1. Instanciation de l'Agent LLM
         agent = await get_agent(ctx.tools, ctx.model_name)
         agent_ctx = Context(agent)
 
-        prompt = (
-            f"You are an expert Test Data Consultant. Your job is to give clear, "
-            f"human-like summaries to stakeholders.\n"
-            f"\n"
-            f"STYLE GUIDELINES:\n"
-            f"1. DO NOT mention 'JSON', 'provided data', 'analyzing the file', or technical structures.\n"
-            f"2. Speak naturally, as if you just looked into the system yourself.\n"
-            f"3. Start directly with the insights. Example: 'Currently, we have 50 assets available...'\n"
-            f"\n"
-            f"CONTEXT DATA:\n"
-            f"{ctx.assets}\n"
-            f"\n"
-            f"TASK:\n"
-            f"Based on the context above, analyze the assets and provide statistics."
-        )
-        ctx.agent_output = await handle_user_message(prompt, agent, agent_ctx)
+        # 2. Définition du Prompt de Chaînage
+        # Le prompt guide l'agent à utiliser les deux outils dans l'ordre.
+        prompt = """
+Exécution forcée du workflow :
 
+1. Appelle get_first_row_mdl_societe.
+2. Récupère SOC_ID.
+3. Appelle get_company_details_from_parc_admin(SOC_ID).
+4. Retourne uniquement : 
+   - Le nom de la société
+   - Le statut
+Aucune explication. Aucun code. Seulement la réponse finale.
+"""
+
+
+        # 3. Exécution de l'Agent (qui gère la séquence des outils)
+        ctx.final_response = await handle_user_message(prompt, agent, agent_ctx)
+
+        # 4. Terminaison du Workflow avec la réponse de l'agent
         return StopEvent({
-            "collections": ctx.collections,
-            "assets": ctx.assets,
-            "agent_output": ctx.agent_output,
+            "status": "Chaîne d'outils terminée avec succès.",
+            "final_answer": ctx.final_response,
         })

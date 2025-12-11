@@ -15,8 +15,19 @@ services:
       - ./mcp_client:/app
     networks:
       - ai_net
+      
+    # ⚠️ AJOUT CRITIQUE POUR LA STABILITÉ ⚠️
+    depends_on:
+      db-mcp-server:
+        condition: service_started
+      ollama:
+        condition: service_started
+    # Correction du chemin du fichier (main.py) et ajout d'un délai pour éviter le timeout
+    command: ["/bin/bash", "-c", "sleep 20 && python main.py"]
+
 
   user-interface:
+    # ... aucune modification ...
     build:
       context: ./user_interface
       dockerfile: Dockerfile
@@ -30,7 +41,8 @@ services:
     networks:
       - ai_net
 
-  mcp-mongodb:
+  db-mcp-server:
+    # ... aucune modification ici, les changements sont dans son Dockerfile et mcp_server.py
     build:
       context: ./mcp_servers/db_server
       dockerfile: Dockerfile
@@ -43,6 +55,7 @@ services:
       - ai_net
 
   ollama:
+    # ... aucune modification ...
     image: ollama/ollama
     container_name: ollama-container
     deploy:
